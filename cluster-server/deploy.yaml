@@ -1,0 +1,91 @@
+# Remote cluster-server PoC deployment.
+#
+# Runs `talosctl cluster-server-launch` as a Kubernetes Deployment on a node
+# with KVM, exposed via a NodePort so `talosctl cluster create
+# --remote-endpoint=<nodeIP>:30100` can delegate to it.
+#
+# Requirements on the host node:
+#   - /dev/kvm available (nested virt or bare metal)
+#   - the node can create bridge/tap interfaces (hostNetwork + privileged)
+#
+# Set `image:` below to wherever you pushed hack/cluster-server/Dockerfile.
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: talos-cluster-server
+  labels:
+    # The pod is privileged + hostNetwork (QEMU bridge/tap, /dev/kvm).
+    # Talos enforces Pod Security admission; opt this namespace into the
+    # privileged profile.
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talos-cluster-server
+  namespace: talos-cluster-server
+  labels:
+    app: talos-cluster-server
+spec:
+  replicas: 1
+  # State lives on a hostPath; never run two replicas against it.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: talos-cluster-server
+  template:
+    metadata:
+      labels:
+        app: talos-cluster-server
+    spec:
+      # hostNetwork so the QEMU bridge (talos<hash>, 10.5.0.0/24) and the
+      # spawned loadbalancer/dhcpd live in the host network namespace —
+      # making the VMs reachable (e.g. via a tailscale subnet router).
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: cluster-server
+          image: storm.goose-piano.ts.net:5000/talos-cluster-server:latest
+          imagePullPolicy: Always
+          args:
+            - --listen=0.0.0.0:50100
+            - --state-dir=/var/mnt/talos-clusterserver
+          securityContext:
+            # privileged: host /dev (incl. /dev/kvm, /dev/net/tun,
+            # /dev/vhost-net) + CAP_NET_ADMIN for libcni bridge/iptables.
+            privileged: true
+          ports:
+            - name: grpc
+              containerPort: 50100
+              protocol: TCP
+          volumeMounts:
+            - name: state
+              mountPath: /var/mnt/talos-clusterserver
+          # No memory limit on purpose: QEMU VMs run as child processes in
+          # this container's cgroup and must draw from node memory freely.
+      volumes:
+        - name: state
+          hostPath:
+            path: /var/mnt/talos-clusterserver
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: talos-cluster-server
+  namespace: talos-cluster-server
+  labels:
+    app: talos-cluster-server
+spec:
+  type: NodePort
+  selector:
+    app: talos-cluster-server
+  ports:
+    - name: grpc
+      port: 50100
+      targetPort: 50100
+      nodePort: 30100
+      protocol: TCP

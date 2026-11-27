@@ -1,0 +1,29 @@
+# gnu-mirror as a Talos container (was gnu-mirror/deploy.yaml).
+# The restricted profile matches the old pod: read-only rootfs and all
+# capabilities dropped. It still runs as uid/gid 0, as before.
+# The cache stays on the `gnu-mirror` user volume (/var/mnt/gnu-mirror).
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: gnu-mirror
+image: storm.goose-piano.ts.net:5000/gnu-mirror@sha256:9f1c3953f9459b978a3135d71b858a57637403221ab023c6e4bc8136a0f7832b
+environment:
+  - LISTEN_ADDR=127.0.0.1:15008
+  - CACHE_DIR=/var/cache/gnu-mirror
+  - CACHE_TTL=720h
+  - UPSTREAM_TIMEOUT=30s
+runAs:
+  uid: 0
+  gid: 0
+security:
+  profile: restricted
+network:
+  mode: host
+mounts:
+  - userVolume:
+      name: gnu-mirror
+      destination: /var/cache/gnu-mirror
+dependsOn:
+  # The image is pulled from the local push registry.
+  containers:
+    - registry-push

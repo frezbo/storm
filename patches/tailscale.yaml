@@ -1,0 +1,153 @@
+---
+apiVersion: v1alpha1
+kind: ExtensionServiceConfig
+name: tailscale
+environment:
+  - TS_AUTHKEY=file:/var/lib/tailscale/authkey
+  - TS_AUTH_ONCE=true
+  - TS_ROUTES=172.16.0.0/16
+  - TS_SERVE_ALLOW_ALL_INTERFACES=true
+  - TS_SERVE_CONFIG=/etc/tailscale/ts-serve.json
+configFiles:
+  - content: |
+      {
+          "TCP": {
+              "5000": {
+                  "HTTPS": true
+              },
+              "5001": {
+                  "HTTPS": true
+              },
+              "5002": {
+                  "HTTPS": true
+              },
+              "5003": {
+                  "HTTPS": true
+              },
+              "5004": {
+                  "HTTPS": true
+              },
+              "5005": {
+                  "HTTPS": true
+              },
+              "5006": {
+                  "HTTPS": true
+              },
+              "5007": {
+                  "HTTPS": true
+              },
+              "5008": {
+                  "HTTPS": true
+              },
+              "5009": {
+                  "HTTPS": true
+              },
+              "5010": {
+                  "HTTPS": true
+              },
+              "5011": {
+                  "HTTPS": true
+              }
+          },
+          "Web": {
+              "${TS_CERT_DOMAIN}:5000": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15000"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5001": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15001"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5002": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15002"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5003": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15003"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5004": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15004"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5005": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15005"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5006": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15006"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5007": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15007"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5008": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15008"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5009": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15009"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5010": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15010"
+                      }
+                  }
+              },
+              "${TS_CERT_DOMAIN}:5011": {
+                  "Handlers": {
+                      "/": {
+                          "Proxy": "http://127.0.0.1:15011"
+                      }
+                  }
+              }
+          },
+          "AllowFunnel": {
+              "${TS_CERT_DOMAIN}:5000": false,
+              "${TS_CERT_DOMAIN}:5001": false,
+              "${TS_CERT_DOMAIN}:5002": false,
+              "${TS_CERT_DOMAIN}:5003": false,
+              "${TS_CERT_DOMAIN}:5004": false,
+              "${TS_CERT_DOMAIN}:5005": false,
+              "${TS_CERT_DOMAIN}:5006": false,
+              "${TS_CERT_DOMAIN}:5007": false,
+              "${TS_CERT_DOMAIN}:5008": false,
+              "${TS_CERT_DOMAIN}:5009": false,
+              "${TS_CERT_DOMAIN}:5010": false,
+              "${TS_CERT_DOMAIN}:5011": false
+          }
+      }
+    mountPath: /etc/tailscale/ts-serve.json

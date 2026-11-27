@@ -1,0 +1,85 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gnu-mirror
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gnu-mirror
+  namespace: gnu-mirror
+  labels:
+    app: gnu-mirror
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: gnu-mirror
+  template:
+    metadata:
+      labels:
+        app: gnu-mirror
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gnu-mirror
+          image: 127.0.0.1:15000/gnu-mirror@sha256:d47af5e24e70a6de15334cca9a4b850cc6470bb632d6c146168e31ff18ce7239
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LISTEN_ADDR
+              value: 127.0.0.1:15008
+            - name: CACHE_DIR
+              value: /var/cache/gnu-mirror
+            - name: CACHE_TTL
+              value: 720h
+            - name: UPSTREAM_TIMEOUT
+              value: 30s
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 15008
+              hostPort: 15008
+              protocol: TCP
+          volumeMounts:
+            - name: cache
+              mountPath: /var/cache/gnu-mirror
+          startupProbe:
+            httpGet:
+              host: 127.0.0.1
+              path: /healthz
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              host: 127.0.0.1
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              host: 127.0.0.1
+              path: /healthz
+              port: http
+            periodSeconds: 30
+      volumes:
+        - name: cache
+          hostPath:
+            path: /var/mnt/gnu-mirror
+            type: Directory

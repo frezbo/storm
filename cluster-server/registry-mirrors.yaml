@@ -1,0 +1,175 @@
+# In-cluster registry + pull-through mirrors for the remote cluster-server.
+#
+# Translated from ../registry-mirrors/docker-compose.yaml. Seven
+# distribution/distribution registries in one hostNetwork pod, binding
+# loopback-shifted ports 15000-15006 on the node:
+#
+#   storm:15000  push registry  (buildkit pushes here; VMs pull from here)
+#   storm:15001  registry.k8s.io            pull-through mirror
+#   storm:15002  gcr.io                     pull-through mirror
+#   storm:15003  ghcr.io                    pull-through mirror
+#   storm:15004  docker.io                  pull-through mirror
+#   storm:15005  factory.talos.dev          pull-through mirror
+#   storm:15006  factory.staging.talos.dev  pull-through mirror
+#
+# `tailscale serve` fronts ports 5000-5006 over HTTPS on the tailnet and
+# proxies each to the corresponding 1500N port on loopback. Off-tailnet
+# clients (and the host itself, via `storm.frezbo.lan:1500N`) talk plain
+# HTTP directly to these ports.
+#
+# Reachability:
+#   - buildkitd on storm: pushes to localhost / storm.frezbo.lan:15000 (HTTP)
+#   - VMs on the bridge:  pull from bridge-gw IP:15001-15006 (HTTP)
+#   - mac over tailnet:   pushes to storm.goose-piano.ts.net:5000 (HTTPS,
+#                         via tailscale serve → 127.0.0.1:15000)
+#
+# All containers share the pod network namespace, so each needs a distinct
+# debug/metrics addr (REGISTRY_HTTP_DEBUG_ADDR) — the image defaults it to
+# :5001, which would collide. Debug port = main port + 100.
+#
+# State persists on the `registries` UserVolume mounted at /var/mnt/registries,
+# survives reboot (unlike a bare hostPath under EPHEMERAL).
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: registry-mirrors
+  labels:
+    # hostNetwork pod — needs the privileged Pod Security profile.
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry-mirrors
+  namespace: registry-mirrors
+  labels:
+    app: registry-mirrors
+spec:
+  replicas: 1
+  # hostNetwork + hostPath — only ever one instance.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: registry-mirrors
+  template:
+    metadata:
+      labels:
+        app: registry-mirrors
+    spec:
+      # hostNetwork so each registry binds its fixed port on the node,
+      # reachable from the QEMU VMs over the bridge route.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        # Plain registry — buildkit push target / VM pull source.
+        - name: push
+          image: ghcr.io/distribution/distribution:edge
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: REGISTRY_HTTP_ADDR, value: "0.0.0.0:15000"}
+            - {name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:15100"}
+            - {name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true"}
+            - {name: REGISTRY_LOG_LEVEL, value: "info"}
+            - {name: OTEL_TRACES_EXPORTER, value: "none"}
+          ports:
+            - {name: push, containerPort: 15000}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/registry, subPath: push}
+        # docker.io pull-through mirror.
+        - name: docker-io
+          image: ghcr.io/distribution/distribution:edge
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: REGISTRY_HTTP_ADDR, value: "0.0.0.0:15004"}
+            - {name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:15104"}
+            - {name: REGISTRY_PROXY_REMOTEURL, value: "https://index.docker.io"}
+            - {name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true"}
+            - {name: REGISTRY_LOG_LEVEL, value: "info"}
+            - {name: OTEL_TRACES_EXPORTER, value: "none"}
+          ports:
+            - {name: docker-io, containerPort: 15004}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/registry, subPath: docker-io}
+        # registry.k8s.io pull-through mirror.
+        - name: registry-k8s-io
+          image: ghcr.io/distribution/distribution:edge
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: REGISTRY_HTTP_ADDR, value: "0.0.0.0:15001"}
+            - {name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:15101"}
+            - {name: REGISTRY_PROXY_REMOTEURL, value: "https://registry.k8s.io"}
+            - {name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true"}
+            - {name: REGISTRY_LOG_LEVEL, value: "info"}
+            - {name: OTEL_TRACES_EXPORTER, value: "none"}
+          ports:
+            - {name: k8s-io, containerPort: 15001}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/registry, subPath: registry-k8s-io}
+        # gcr.io pull-through mirror.
+        - name: gcr-io
+          image: ghcr.io/distribution/distribution:edge
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: REGISTRY_HTTP_ADDR, value: "0.0.0.0:15002"}
+            - {name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:15102"}
+            - {name: REGISTRY_PROXY_REMOTEURL, value: "https://gcr.io"}
+            - {name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true"}
+            - {name: REGISTRY_LOG_LEVEL, value: "info"}
+            - {name: OTEL_TRACES_EXPORTER, value: "none"}
+          ports:
+            - {name: gcr-io, containerPort: 15002}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/registry, subPath: gcr-io}
+        # ghcr.io pull-through mirror.
+        - name: ghcr-io
+          image: ghcr.io/distribution/distribution:edge
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: REGISTRY_HTTP_ADDR, value: "0.0.0.0:15003"}
+            - {name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:15103"}
+            - {name: REGISTRY_PROXY_REMOTEURL, value: "https://ghcr.io"}
+            - {name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true"}
+            - {name: REGISTRY_LOG_LEVEL, value: "info"}
+            - {name: OTEL_TRACES_EXPORTER, value: "none"}
+          ports:
+            - {name: ghcr-io, containerPort: 15003}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/registry, subPath: ghcr-io}
+        # factory.talos.dev pull-through mirror (Image Factory).
+        - name: factory-talos-dev
+          image: ghcr.io/distribution/distribution:edge
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: REGISTRY_HTTP_ADDR, value: "0.0.0.0:15005"}
+            - {name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:15105"}
+            - {name: REGISTRY_PROXY_REMOTEURL, value: "https://factory.talos.dev"}
+            - {name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true"}
+            - {name: REGISTRY_LOG_LEVEL, value: "info"}
+            - {name: OTEL_TRACES_EXPORTER, value: "none"}
+          ports:
+            - {name: factory, containerPort: 15005}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/registry, subPath: factory-talos-dev}
+        # factory.staging.talos.dev pull-through mirror (staging Image Factory).
+        - name: factory-staging-talos-dev
+          image: ghcr.io/distribution/distribution:edge
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: REGISTRY_HTTP_ADDR, value: "0.0.0.0:15006"}
+            - {name: REGISTRY_HTTP_DEBUG_ADDR, value: "127.0.0.1:15106"}
+            - {name: REGISTRY_PROXY_REMOTEURL, value: "https://factory.stage-pnap.managed.siderolabs.io"}
+            - {name: REGISTRY_STORAGE_DELETE_ENABLED, value: "true"}
+            - {name: REGISTRY_LOG_LEVEL, value: "info"}
+            - {name: OTEL_TRACES_EXPORTER, value: "none"}
+          ports:
+            - {name: factory-stg, containerPort: 15006}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/registry, subPath: factory-staging-talos-dev}
+      volumes:
+        - name: data
+          hostPath:
+            path: /var/mnt/registries
+            type: Directory

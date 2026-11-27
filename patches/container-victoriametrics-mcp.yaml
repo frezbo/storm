@@ -1,0 +1,25 @@
+# victoriametrics-mcp as a Talos container (was victoriametrics-mcp/deploy.yaml).
+# Restricted profile, uid/gid 1000 and host network, so tailscale serve
+# 5009 -> 127.0.0.1:15009 works unchanged.
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: victoriametrics-mcp
+image: ghcr.io/victoriametrics/mcp-victoriametrics@sha256:bcbf84f945d6efb03fb8b2d2ccc3294420dccdc0b445752dce96f02619416dfe
+environment:
+  # Dynamic mode reads the real VictoriaMetrics Cloud API key from
+  # Aperture's X-VM-Cloud-Access header on each MCP request.
+  - VMC_API_KEY=dynamic
+  - MCP_SERVER_MODE=http
+  - MCP_LISTEN_ADDR=:15009
+  - MCP_LOG_FORMAT=json
+  # Aperture only consumes tools. Listing the bundled documentation
+  # resources sends several megabytes and exceeds its connector timeout.
+  - MCP_DISABLE_RESOURCES=true
+runAs:
+  uid: 1000
+  gid: 1000
+security:
+  profile: restricted
+network:
+  mode: host

@@ -1,0 +1,96 @@
+#cloud-config
+users:
+  - name: frezbo
+    uid: 1000
+    groups: [wheel]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    shell: /usr/bin/fish
+yum_repos:
+  tailscale-stable:
+    name: Tailscale stable
+    baseurl: https://pkgs.tailscale.com/stable/fedora/$basearch
+    enabled: true
+    gpgcheck: true
+    repo_gpgcheck: true
+    gpgkey: https://pkgs.tailscale.com/stable/fedora/repo.gpg
+  rex:
+    name: Rex (preview)
+    baseurl: https://pkgs.superlogical.com/rex/rpm/preview/$basearch
+    enabled: true
+    gpgcheck: true
+    repo_gpgcheck: true
+    gpgkey: https://pkgs.superlogical.com/rex/keys/rex.asc
+package_upgrade: true
+packages:
+  - rex-0.1.0~preview.20
+  - tailscale
+  - qemu-guest-agent
+  - fish
+  - gcc
+  - gcc-c++
+  - git
+  - make
+  - glibc-langpack-en
+  - binutils
+  - bind-utils
+  - cpio
+  - cryptsetup
+  - diffoscope
+  - dosfstools
+  - e2fsprogs
+  - elfutils
+  - erofs-utils
+  - gdb
+  - gdisk
+  - git-lfs
+  - htop
+  - lsof
+  - ltrace
+  - mtools
+  - mtr
+  - nmap-ncat
+  - parted
+  - pciutils
+  - qemu-img
+  - rsync
+  - squashfs-tools
+  - strace
+  - tcpdump
+  - unzip
+  - xfsprogs
+  - xorriso
+  - zstd
+write_files:
+  - path: /home/frezbo/.config/systemd/user/rex.service.d/tailnet.conf
+    owner: frezbo:frezbo
+    defer: true
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart=/usr/bin/rex server run --log-format text --extra-listen tailnet://:7297 --tailscaled-socket /run/tailscale/tailscaled.sock
+  # The Mac LaunchAgent forwards its gpg-agent extra socket to
+  # /run/user/1000/gnupg/S.gpg-agent; the directory must exist before ssh
+  # connects, and a local agent must never take the socket.
+  - path: /home/frezbo/.config/user-tmpfiles.d/gnupg.conf
+    owner: frezbo:frezbo
+    defer: true
+    content: |
+      d %t/gnupg 0700 - - -
+  - path: /home/frezbo/.gnupg/gpg.conf
+    owner: frezbo:frezbo
+    permissions: "0600"
+    defer: true
+    content: |
+      no-autostart
+runcmd:
+  - dev=$(ip -o route get 1.1.1.1 | awk '{print $5}'); con=$(nmcli -g GENERAL.CONNECTION device show "$dev"); nmcli connection modify "$con" +ipv4.addresses 10.250.0.2/24 +ipv4.routes "172.16.0.0/16 10.250.0.1" && nmcli connection up "$con"
+  # package_upgrade restarts systemd-binfmt until it hits its start limit.
+  - systemctl reset-failed systemd-binfmt && systemctl start systemd-binfmt
+  - systemctl enable --now tailscaled qemu-guest-agent
+  - loginctl enable-linger frezbo
+  # write_files creates ~/.gnupg with the default 0755; gpg wants 0700.
+  - chmod 700 /home/frezbo/.gnupg
+  - until [ -S /run/user/1000/bus ]; do sleep 1; done; sudo -u frezbo XDG_RUNTIME_DIR=/run/user/1000 systemctl --user enable rex.service podman.socket
+  - tailscale up --ssh --operator=frezbo --hostname=storm-dev
+  - sudo -u frezbo XDG_RUNTIME_DIR=/run/user/1000 systemctl --user restart rex.service

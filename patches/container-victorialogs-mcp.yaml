@@ -1,0 +1,41 @@
+# victorialogs MCP servers as Talos containers (was victorialogs-mcp/deploy.yaml).
+# Restricted profile, uid/gid 1000 and host network, so tailscale serve
+# 5010/5011 -> 127.0.0.1:15010/15011 works unchanged.
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: victorialogs-prod-mcp
+image: ghcr.io/victoriametrics/mcp-victorialogs@sha256:753bb4fbe402ca1a782842f44636830f9895736f11d7fe783b924f8a0daf083d
+environment:
+  - VL_INSTANCE_ENTRYPOINT=https://gw-c21-1c.cloud.victoriametrics.com
+  - MCP_SERVER_MODE=http
+  - MCP_LISTEN_ADDR=:15010
+  - MCP_PASSTHROUGH_HEADERS=Authorization
+  - MCP_DISABLED_TOOLS=documentation
+  - MCP_LOG_FORMAT=json
+runAs:
+  uid: 1000
+  gid: 1000
+security:
+  profile: restricted
+network:
+  mode: host
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: victorialogs-nonprod-mcp
+image: ghcr.io/victoriametrics/mcp-victorialogs@sha256:753bb4fbe402ca1a782842f44636830f9895736f11d7fe783b924f8a0daf083d
+environment:
+  - VL_INSTANCE_ENTRYPOINT=https://gw-c21-1a.cloud.victoriametrics.com
+  - MCP_SERVER_MODE=http
+  - MCP_LISTEN_ADDR=:15011
+  - MCP_PASSTHROUGH_HEADERS=Authorization
+  - MCP_DISABLED_TOOLS=documentation
+  - MCP_LOG_FORMAT=json
+runAs:
+  uid: 1000
+  gid: 1000
+security:
+  profile: restricted
+network:
+  mode: host

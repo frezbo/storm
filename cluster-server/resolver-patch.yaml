@@ -1,0 +1,21 @@
+# Machine config patch: prepend tailscale's MagicDNS resolver to the host
+# nameservers so `storm.goose-piano.ts.net` (and any other tailnet
+# hostname) resolves to the tailnet IP instead of the public funnel IP
+# returned by the LAN resolver.
+#
+# Uses the new multi-doc ResolverConfig kind. Setting nameservers here
+# overrides anything DHCP supplied, so the existing LAN resolver
+# (192.168.15.1) and search domain (frezbo.lan) are re-listed so they
+# keep working.
+#
+# Apply (no reboot — resolver config is applied at runtime):
+#   talosctl --talosconfig ~/Downloads/storm-talosconfig.yaml -n storm \
+#     patch mc -p @hack/cluster-server/resolver-patch.yaml
+apiVersion: v1alpha1
+kind: ResolverConfig
+nameservers:
+  - address: 100.100.100.100
+  - address: 192.168.15.1
+searchDomains:
+  domains:
+    - frezbo.lan

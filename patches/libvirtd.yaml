@@ -1,0 +1,104 @@
+# Host side of Talos VirtualMachineConfig guests (siderolabs/libvirtd
+# extension). libvirt runs QEMU as qemu:kvm, which Talos has no /etc/passwd
+# or /etc/group entries for; same as hack/test/patches/extensions-libvirt.yaml.
+apiVersion: v1alpha1
+kind: EtcFileConfig
+name: passwd
+mode: 0o644
+contents: |
+  root:x:0:0:root:/root:/bin/sh
+  qemu:x:107:107:qemu:/var/lib/libvirt:/bin/false
+  nobody:x:65534:65534:nobody:/:/bin/false
+---
+apiVersion: v1alpha1
+kind: EtcFileConfig
+name: group
+mode: 0o644
+contents: |
+  root:x:0:
+  kvm:x:36:qemu
+  qemu:x:107:
+  nobody:x:65534:
+---
+# Guests attach as macvtap (bridge mode) on enp1s0, which can never reach the
+# host's own enp1s0 addresses. This sibling macvlan on the same parent can:
+# guests reach storm at 10.250.0.1 directly, without hairpinning via the router.
+apiVersion: v1alpha1
+kind: MacVLANConfig
+name: enp1s0.vm
+parent: enp1s0
+mode: bridge
+up: true
+addresses:
+  - address: 10.250.0.1/24
+---
+# Any link document turns off Talos' default DHCP on physical links
+# (RunDefaultDHCPOperators), which cut storm off; keep enp1s0 on DHCP
+# explicitly, with the default operator's mac client identifier.
+apiVersion: v1alpha1
+kind: DHCPv4Config
+name: enp1s0
+clientIdentifier: mac
+---
+# VM disks. A volume already in the pool under the name Talos derives
+# (<vm>__<disk>.<format>) is adopted with its contents: v1.15.0-beta.0 cannot
+# provision writable disks from images, so cloud images are placed there.
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: vm-pool
+volumeType: partition
+provisioning:
+  diskSelector:
+    match: system_disk
+  minSize: 300GiB
+  maxSize: 300GiB
+filesystem:
+  type: xfs
+encryption:
+  provider: luks2
+  allowDiscards: true
+  keys:
+    - slot: 0
+      tpm:
+        checkSecurebootStatusOnEnroll: true
+      lockToState: true
+    - slot: 1
+      kms:
+        endpoint: https://frezbo.siderolink.eu-central-1.omni.siderolabs.io
+      lockToState: true
+---
+apiVersion: v1alpha1
+kind: StoragePoolConfig
+name: vms
+volume:
+  name: vm-pool
+---
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: vm-images
+volumeType: partition
+provisioning:
+  diskSelector:
+    match: system_disk
+  minSize: 20GiB
+  maxSize: 20GiB
+filesystem:
+  type: xfs
+encryption:
+  provider: luks2
+  allowDiscards: true
+  keys:
+    - slot: 0
+      tpm:
+        checkSecurebootStatusOnEnroll: true
+      lockToState: true
+    - slot: 1
+      kms:
+        endpoint: https://frezbo.siderolink.eu-central-1.omni.siderolabs.io
+      lockToState: true
+---
+apiVersion: v1alpha1
+kind: ContentLibraryConfig
+name: images
+backing:
+  volume: vm-images

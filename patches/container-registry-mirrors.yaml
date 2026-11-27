@@ -1,0 +1,156 @@
+# Registry + pull-through mirrors as Talos containers (was the
+# cluster-server/registry-mirrors.yaml Deployment).
+#
+# Each registry mounts the whole `registries` user volume
+# (/var/mnt/registries) at /var/lib/registry. Its storage root is then pointed
+# at the subdirectory the Deployment used as a subPath, so each one keeps
+# reading and writing the same host directory:
+#   /var/mnt/registries/<push|docker-io|registry-k8s-io|...>
+# Ports and debug ports are the same as before (main 1500N, debug 1510N on
+# loopback).
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: registry-push
+image: ghcr.io/distribution/distribution:edge
+environment:
+  - REGISTRY_HTTP_ADDR=0.0.0.0:15000
+  - REGISTRY_HTTP_DEBUG_ADDR=127.0.0.1:15100
+  - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/var/lib/registry/push
+  - REGISTRY_STORAGE_DELETE_ENABLED=true
+  - REGISTRY_LOG_LEVEL=info
+  - OTEL_TRACES_EXPORTER=none
+network:
+  mode: host
+mounts:
+  - userVolume:
+      name: registries
+      destination: /var/lib/registry
+  - tmpfs:
+      destination: /tmp
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: registry-docker-io
+image: ghcr.io/distribution/distribution:edge
+environment:
+  - REGISTRY_HTTP_ADDR=0.0.0.0:15004
+  - REGISTRY_HTTP_DEBUG_ADDR=127.0.0.1:15104
+  - REGISTRY_PROXY_REMOTEURL=https://index.docker.io
+  - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/var/lib/registry/docker-io
+  - REGISTRY_STORAGE_DELETE_ENABLED=true
+  - REGISTRY_LOG_LEVEL=info
+  - OTEL_TRACES_EXPORTER=none
+network:
+  mode: host
+mounts:
+  - userVolume:
+      name: registries
+      destination: /var/lib/registry
+  - tmpfs:
+      destination: /tmp
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: registry-k8s-io
+image: ghcr.io/distribution/distribution:edge
+environment:
+  - REGISTRY_HTTP_ADDR=0.0.0.0:15001
+  - REGISTRY_HTTP_DEBUG_ADDR=127.0.0.1:15101
+  - REGISTRY_PROXY_REMOTEURL=https://registry.k8s.io
+  - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/var/lib/registry/registry-k8s-io
+  - REGISTRY_STORAGE_DELETE_ENABLED=true
+  - REGISTRY_LOG_LEVEL=info
+  - OTEL_TRACES_EXPORTER=none
+network:
+  mode: host
+mounts:
+  - userVolume:
+      name: registries
+      destination: /var/lib/registry
+  - tmpfs:
+      destination: /tmp
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: registry-gcr-io
+image: ghcr.io/distribution/distribution:edge
+environment:
+  - REGISTRY_HTTP_ADDR=0.0.0.0:15002
+  - REGISTRY_HTTP_DEBUG_ADDR=127.0.0.1:15102
+  - REGISTRY_PROXY_REMOTEURL=https://gcr.io
+  - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/var/lib/registry/gcr-io
+  - REGISTRY_STORAGE_DELETE_ENABLED=true
+  - REGISTRY_LOG_LEVEL=info
+  - OTEL_TRACES_EXPORTER=none
+network:
+  mode: host
+mounts:
+  - userVolume:
+      name: registries
+      destination: /var/lib/registry
+  - tmpfs:
+      destination: /tmp
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: registry-ghcr-io
+image: ghcr.io/distribution/distribution:edge
+environment:
+  - REGISTRY_HTTP_ADDR=0.0.0.0:15003
+  - REGISTRY_HTTP_DEBUG_ADDR=127.0.0.1:15103
+  - REGISTRY_PROXY_REMOTEURL=https://ghcr.io
+  - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/var/lib/registry/ghcr-io
+  - REGISTRY_STORAGE_DELETE_ENABLED=true
+  - REGISTRY_LOG_LEVEL=info
+  - OTEL_TRACES_EXPORTER=none
+network:
+  mode: host
+mounts:
+  - userVolume:
+      name: registries
+      destination: /var/lib/registry
+  - tmpfs:
+      destination: /tmp
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: registry-factory-talos-dev
+image: ghcr.io/distribution/distribution:edge
+environment:
+  - REGISTRY_HTTP_ADDR=0.0.0.0:15005
+  - REGISTRY_HTTP_DEBUG_ADDR=127.0.0.1:15105
+  - REGISTRY_PROXY_REMOTEURL=https://factory.talos.dev
+  - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/var/lib/registry/factory-talos-dev
+  - REGISTRY_STORAGE_DELETE_ENABLED=true
+  - REGISTRY_LOG_LEVEL=info
+  - OTEL_TRACES_EXPORTER=none
+network:
+  mode: host
+mounts:
+  - userVolume:
+      name: registries
+      destination: /var/lib/registry
+  - tmpfs:
+      destination: /tmp
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: registry-factory-staging
+image: ghcr.io/distribution/distribution:edge
+environment:
+  - REGISTRY_HTTP_ADDR=0.0.0.0:15006
+  - REGISTRY_HTTP_DEBUG_ADDR=127.0.0.1:15106
+  - REGISTRY_PROXY_REMOTEURL=https://factory.stage-pnap.managed.siderolabs.io
+  - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/var/lib/registry/factory-staging-talos-dev
+  - REGISTRY_STORAGE_DELETE_ENABLED=true
+  - REGISTRY_LOG_LEVEL=info
+  - OTEL_TRACES_EXPORTER=none
+network:
+  mode: host
+mounts:
+  - userVolume:
+      name: registries
+      destination: /var/lib/registry
+  - tmpfs:
+      destination: /tmp

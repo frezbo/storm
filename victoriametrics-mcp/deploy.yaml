@@ -1,0 +1,84 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: victoriametrics-mcp
+  labels:
+    # The pod uses the node network so Talos's Tailscale extension can proxy
+    # loopback traffic to it. The container itself remains unprivileged.
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: victoriametrics-mcp
+  namespace: victoriametrics-mcp
+  labels:
+    app: victoriametrics-mcp
+spec:
+  replicas: 1
+  # hostNetwork reserves a fixed node port, so updates must not overlap.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: victoriametrics-mcp
+  template:
+    metadata:
+      labels:
+        app: victoriametrics-mcp
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: victoriametrics-mcp
+          image: ghcr.io/victoriametrics/mcp-victoriametrics@sha256:bcbf84f945d6efb03fb8b2d2ccc3294420dccdc0b445752dce96f02619416dfe
+          imagePullPolicy: IfNotPresent
+          env:
+            # Dynamic mode reads the real VictoriaMetrics Cloud API key from
+            # Aperture's X-VM-Cloud-Access header on each MCP request.
+            - name: VMC_API_KEY
+              value: dynamic
+            - name: MCP_SERVER_MODE
+              value: http
+            - name: MCP_LISTEN_ADDR
+              value: ":15009"
+            - name: MCP_LOG_FORMAT
+              value: json
+            # Aperture only consumes tools. Listing the bundled documentation
+            # resources sends several megabytes and exceeds its connector timeout.
+            - name: MCP_DISABLE_RESOURCES
+              value: "true"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 15009
+              hostPort: 15009
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            failureThreshold: 60
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 30

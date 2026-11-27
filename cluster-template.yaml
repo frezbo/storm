@@ -1,0 +1,61 @@
+---
+kind: Cluster
+name: storm
+kubernetes:
+  version: 1.37.2
+  manifests:
+    # Native BuildKit needs ContainerConfig seccompProfile (Talos v1.15.0-beta.0),
+    # which Omni v1.13.3's embedded machinery rejects as an unknown key.
+    - name: buildkitd
+      mode: full
+      file: cluster-server/buildkitd.yaml
+talos:
+  version: v1.15.0-beta.0
+features:
+  enableWorkloadProxy: true
+patches:
+  - file: patches/multihoming.yaml
+  - file: patches/sandboxd.yaml
+  - file: patches/fstrim.yaml
+  - file: patches/fsscrub.yaml
+---
+kind: ControlPlane
+machines:
+  - 27f13b80-49af-11ef-9b05-8814a3404d00
+patches:
+  # Still needed: CoreDNS (Omni-managed Kubernetes plumbing) must schedule
+  # on this single control-plane node.
+  - file: patches/controlplane-allow-scheduling.yaml
+---
+kind: Workers
+---
+kind: Machine
+systemExtensions:
+  - siderolabs/amd-ucode
+  - siderolabs/tailscale
+  - siderolabs/libvirtd
+name: 27f13b80-49af-11ef-9b05-8814a3404d00
+patches:
+  - file: patches/volumes.yaml
+  - file: patches/tailscale.yaml
+  - file: patches/tailscale-resolver.yaml
+  - file: patches/tailscale-udp-gro.yaml
+  - file: patches/talos-clusterserver-uservolume.yaml
+  - file: patches/buildkitd-uservolume.yaml
+  - file: patches/registries-uservolume.yaml
+  - file: patches/wol.yaml
+  - file: patches/timesync.yaml
+  - file: patches/gnu-mirror-uservolume.yaml
+  - file: patches/registry-local-http-mirror.yaml
+  - file: patches/container-registry-mirrors.yaml
+  - file: patches/container-talos-cluster-server.yaml
+    idOverride: 412-cm-27f13b80-49af-11ef-9b05-8814a3404d00-patches/container-talos-cluster-server.yaml
+  - file: patches/container-gnu-mirror.yaml
+    idOverride: 413-cm-27f13b80-49af-11ef-9b05-8814a3404d00-patches/container-gnu-mirror.yaml
+  - file: patches/container-victoriametrics-mcp.yaml
+    idOverride: 414-cm-27f13b80-49af-11ef-9b05-8814a3404d00-patches/container-victoriametrics-mcp.yaml
+  - file: patches/container-victorialogs-mcp.yaml
+    idOverride: 415-cm-27f13b80-49af-11ef-9b05-8814a3404d00-patches/container-victorialogs-mcp.yaml
+  - file: patches/libvirtd.yaml
+  - file: patches/vm-dev.yaml
+  - file: patches/container-storm-attest.yaml

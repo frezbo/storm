@@ -1,0 +1,34 @@
+# Keyless Tailscale join (TAILSCALE-ATTESTATION.md, code in attest/). While tailscaled reports
+# NeedsLogin, attests Storm's TPM to the Fly verifier over io's WireGuard route and writes the
+# returned one-off auth key to /var/lib/tailscale/authkey, which the tailscale extension reads
+# through TS_AUTHKEY=file:... (patches/tailscale.yaml). Runs as a watcher: Omni 1.13 rejects
+# lifecycle settings, so a one-shot would restart every 5s.
+#
+# Privileged for /dev/tpmrm0: ContainerConfig devices only support raw volumes. Host network:
+# the verifier is on Fly's private network (storm-attest.internal), reached through io.
+# The image comes from GHCR, not the storm registry: that name resolves only after Tailscale
+# is up.
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: storm-attest
+image: ghcr.io/frezbo/storm-attest@sha256:2ad478e6885a2860441e5eaa90c8a07a6368cfb1f591ba3a0f1fd94d89b8a3f2
+args:
+  - -verifier=http://storm-attest.internal:8080
+runAs:
+  uid: 0
+  gid: 0
+security:
+  profile: privileged
+network:
+  mode: host
+mounts:
+  - hostPath:
+      source: /dev/tpmrm0
+      destination: /dev/tpmrm0
+  - hostPath:
+      source: /var/lib/tailscale
+      destination: /var/lib/tailscale
+  - hostPath:
+      source: /var/run/tailscale
+      destination: /var/run/tailscale

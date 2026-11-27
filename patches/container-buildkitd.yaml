@@ -1,0 +1,69 @@
+# buildkitd as a Talos container (was the cluster-server/buildkitd.yaml
+# Deployment). The ConfigMap is now an EtcFileConfig written to
+# /etc/buildkit/buildkitd.toml on the host and bind-mounted read-only.
+# Cache stays on the `buildkitd` user volume (/var/mnt/buildkitd).
+# Host networking keeps it reachable at tcp://storm.frezbo.lan:1234.
+# Needs Talos >= v1.15.0-beta.0 (writable sysfs, seccompProfile).
+---
+apiVersion: v1alpha1
+kind: EtcFileConfig
+name: buildkit/buildkitd.toml
+mode: 0o644
+contents: |
+  # config reference: https://docs.docker.com/build/buildkit/toml-configuration
+  [grpc]
+    address = [ "tcp://0.0.0.0:1234" ]
+
+  [worker.oci]
+    gc = true
+
+  # GC policies run on a gc trigger, in order (top→bottom). Once any
+  # custom policy exists, global limits are ignored — only per-policy
+  # limits apply.
+
+  # Easy-to-reproduce cached data first: local build contexts, RUN
+  # cache mounts, git checkouts.
+  [[worker.oci.gcpolicy]]
+    filters       = ["type==source.local","type==exec.cachemount","type==source.git.checkout"]
+    keepDuration  = "168h"  # 7d
+    reservedSpace = "250GB"
+
+  # Age-based sweep of anything not shared/pinned.
+  [[worker.oci.gcpolicy]]
+    keepDuration = "336h"  # 14d
+
+  # Final hammer: match everything to enforce the cap.
+  [[worker.oci.gcpolicy]]
+    all           = true
+    maxUsedSpace  = "95%"
+    reservedSpace = "250GB"
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: buildkitd
+image: moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+args:
+  - --config=/etc/buildkit/buildkitd.toml
+security:
+  profile: privileged
+  # privileged keeps containerd's default seccomp filter, which blocks the
+  # session-keyring syscalls nested runc needs.
+  seccompProfile: unconfined
+network:
+  mode: host
+mounts:
+  - hostPath:
+      source: /etc/buildkit
+      destination: /etc/buildkit
+      options:
+        - ro
+  - userVolume:
+      name: buildkitd
+      destination: /var/lib/buildkit
+  # The default OCI spec has no cgroup mount; the runc worker needs cgroupfs.
+  - hostPath:
+      source: /sys/fs/cgroup
+      destination: /sys/fs/cgroup
+dependsOn:
+  paths:
+    - /etc/buildkit/buildkitd.toml

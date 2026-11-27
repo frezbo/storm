@@ -1,0 +1,123 @@
+# In-cluster buildkitd for the dev-hybrid buildx builder.
+#
+# Runs amd64 builds natively on the NUC. hostNetwork so the buildx `remote`
+# driver reaches it at tcp://storm.frezbo.lan:1234. Modelled on
+# ../ops-managed-siderolabs/clusters/dev/apps/ci/buildkit.
+#
+# buildx wiring (client side):
+#   docker buildx rm local
+#   docker buildx create --name dev-hybrid --driver docker-container \
+#     --driver-opt=network=host --platform=linux/arm64 --bootstrap
+#   docker buildx create --name dev-hybrid --append --driver remote \
+#     --platform=linux/amd64 tcp://storm.frezbo.lan:1234
+#   docker buildx use dev-hybrid
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: buildkit
+  labels:
+    # privileged buildkitd + hostNetwork.
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: buildkitd-config
+  namespace: buildkit
+data:
+  # config reference: https://docs.docker.com/build/buildkit/toml-configuration
+  buildkitd.toml: |
+    [grpc]
+      address = [ "tcp://0.0.0.0:1234" ]
+
+    [worker.oci]
+      gc = true
+
+    # GC policies run on a gc trigger, in order (top→bottom). Once any
+    # custom policy exists, global limits are ignored — only per-policy
+    # limits apply.
+
+    # Easy-to-reproduce cached data first: local build contexts, RUN
+    # cache mounts, git checkouts.
+    [[worker.oci.gcpolicy]]
+      filters       = ["type==source.local","type==exec.cachemount","type==source.git.checkout"]
+      keepDuration  = "168h"  # 7d
+      reservedSpace = "250GB"
+
+    # Age-based sweep of anything not shared/pinned.
+    [[worker.oci.gcpolicy]]
+      keepDuration = "336h"  # 14d
+
+    # Final hammer: match everything to enforce the cap. The cache shares
+    # /var with kubelet, which evicts this pod below 15% free
+    # (imagefs.available); an evicted buildkitd never runs GC again, so
+    # keep a margin above that threshold.
+    [[worker.oci.gcpolicy]]
+      all           = true
+      minFreeSpace  = "25%"
+      reservedSpace = "250GB"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildkitd
+  namespace: buildkit
+  labels:
+    app: buildkitd
+spec:
+  replicas: 1
+  # hostNetwork port + hostPath cache — single instance only.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: buildkitd
+  template:
+    metadata:
+      labels:
+        app: buildkitd
+    spec:
+      # hostNetwork: reachable at storm.frezbo.lan:1234 for the buildx
+      # remote driver, and shares the host's resolver (tailscale accept-dns)
+      # so storm.frezbo.lan + the registry mirrors resolve.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      containers:
+        - name: buildkitd
+          image: moby/buildkit:v0.34.1@sha256:99368f3e46177c6405b9740e4461d91cee004128daeecca78d4ceac50ec1da5c
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config=/etc/buildkit/buildkitd.toml
+          securityContext:
+            privileged: true
+          ports:
+            - name: grpc
+              containerPort: 1234
+          resources:
+            requests:
+              memory: 2Gi
+          readinessProbe:
+            exec:
+              command:
+                - buildctl
+                - --addr=tcp://0.0.0.0:1234
+                - debug
+                - workers
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/buildkit
+            - name: cache
+              mountPath: /var/lib/buildkit
+      volumes:
+        - name: config
+          configMap:
+            name: buildkitd-config
+        - name: cache
+          hostPath:
+            path: /var/mnt/buildkitd
+            type: Directory

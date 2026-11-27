@@ -1,0 +1,17 @@
+# Machine config patch: register the local PoC registry as an HTTP mirror.
+#
+# Without this, the NUC's containerd tries HTTPS against 192.168.30.102:15000
+# and fails ("server gave HTTP response to HTTPS client") because the local
+# registry serves plain HTTP.
+#
+# Uses the RegistryMirrorConfig document (the v1alpha1 multi-doc form), not
+# the legacy machine.registries.mirrors block.
+#
+# Apply (no reboot — registry config is applied at runtime):
+#   talosctl --talosconfig ~/Downloads/storm-talosconfig.yaml -n storm \
+#     patch mc -p @hack/cluster-server/registry-patch.yaml
+apiVersion: v1alpha1
+kind: RegistryMirrorConfig
+name: 192.168.30.102:15000
+endpoints:
+  - url: http://192.168.30.102:15000

@@ -1,0 +1,77 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grafana-mcp
+  labels:
+    # The pod uses the node network so Talos's Tailscale extension can proxy
+    # loopback traffic to it. The container itself remains unprivileged.
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-mcp
+  namespace: grafana-mcp
+  labels:
+    app: grafana-mcp
+spec:
+  replicas: 1
+  # hostNetwork reserves a fixed node port, so updates must not overlap.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: grafana-mcp
+  template:
+    metadata:
+      labels:
+        app: grafana-mcp
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: grafana-mcp
+          image: grafana/mcp-grafana@sha256:d5b51db0c8eaafc6ed3fede5bfcc8d67b2384a40cf3d493086e378855ceba882
+          imagePullPolicy: IfNotPresent
+          command:
+            - /app/mcp-grafana
+          args:
+            - --transport=streamable-http
+            - --address=0.0.0.0:15007
+            - --endpoint-path=/mcp
+            - --disable-write
+            - --allowed-hosts=storm.goose-piano.ts.net:5007,localhost:15007,127.0.0.1:15007
+          env:
+            - name: GRAFANA_URL
+              value: https://monitoring.core.managed.siderolabs.io
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 15007
+              hostPort: 15007
+              protocol: TCP
+          startupProbe:
+            tcpSocket:
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 30

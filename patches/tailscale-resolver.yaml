@@ -1,0 +1,10 @@
+---
+apiVersion: v1alpha1
+kind: ResolverConfig
+nameservers:
+  - address: 100.100.100.100
+  - address: 192.168.15.1
+searchDomains:
+  domains:
+    - goose-piano.ts.net
+    - frezbo.lan

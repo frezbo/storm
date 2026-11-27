@@ -1,0 +1,9 @@
+# Talos's ContainerConfig image puller does not fall back to plain HTTP for
+# loopback registries the way CRI's hosts.toml defaults do. Without this,
+# pulling gnu-mirror from 127.0.0.1:15000 tries HTTPS and fails.
+---
+apiVersion: v1alpha1
+kind: RegistryMirrorConfig
+name: 127.0.0.1:15000
+endpoints:
+  - url: http://127.0.0.1:15000

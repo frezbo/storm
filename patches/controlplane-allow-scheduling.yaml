@@ -1,0 +1,8 @@
+# The v1.15 config contract generates a KubeNodeConfig with the
+# control-plane NoSchedule taint; the legacy
+# .cluster.allowSchedulingOnControlPlanes conflicts with it.
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+taints:
+  node-role.kubernetes.io/control-plane:
+    $patch: delete

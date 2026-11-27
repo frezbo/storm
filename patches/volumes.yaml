@@ -1,0 +1,44 @@
+# System volumes. Replaces Omni's diskEncryption feature, whose patch
+# (legacy machine.systemDiskEncryption) has a single KMS key and no discards.
+#
+# LUKS key slots are alternatives: the TPM slot (PCR 7, SecureBoot) boots
+# storm without Omni; the KMS slot recovers when a firmware change breaks the
+# TPM policy. allowDiscards lets the weekly FilesystemTrimConfig reach the
+# NVMe; without it dm-crypt reports discard_max_bytes 0 and fstrim is a no-op.
+#
+# EPHEMERAL holds only containerd, etcd, kubelet and logs; bulk data lives on
+# the partitioned user volumes. Layout on the 1TB disk (929GiB after EFI,
+# META, STATE): EPHEMERAL 30, registries 120, talos-clusterserver 150,
+# vm-pool 300, vm-images 20, gnu-mirror 10, buildkitd 290.
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: STATE
+encryption:
+  provider: luks2
+  allowDiscards: true
+  keys:
+    - slot: 0
+      tpm:
+        checkSecurebootStatusOnEnroll: true
+    - slot: 1
+      kms:
+        endpoint: https://frezbo.siderolink.eu-central-1.omni.siderolabs.io
+---
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: EPHEMERAL
+provisioning:
+  maxSize: 30GiB
+  grow: false
+encryption:
+  provider: luks2
+  allowDiscards: true
+  keys:
+    - slot: 0
+      tpm:
+        checkSecurebootStatusOnEnroll: true
+      lockToState: true
+    - slot: 1
+      kms:
+        endpoint: https://frezbo.siderolink.eu-central-1.omni.siderolabs.io
+      lockToState: true

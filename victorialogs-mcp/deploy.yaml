@@ -1,0 +1,153 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: victorialogs-mcp
+  labels:
+    # The pods use the node network so Talos's Tailscale extension can proxy
+    # loopback traffic to them. The containers remain unprivileged.
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: victorialogs-prod-mcp
+  namespace: victorialogs-mcp
+  labels:
+    app: victorialogs-prod-mcp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: victorialogs-prod-mcp
+  template:
+    metadata:
+      labels:
+        app: victorialogs-prod-mcp
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: victorialogs-mcp
+          image: ghcr.io/victoriametrics/mcp-victorialogs@sha256:753bb4fbe402ca1a782842f44636830f9895736f11d7fe783b924f8a0daf083d
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: VL_INSTANCE_ENTRYPOINT
+              value: https://gw-c21-1c.cloud.victoriametrics.com
+            - name: MCP_SERVER_MODE
+              value: http
+            - name: MCP_LISTEN_ADDR
+              value: ":15010"
+            - name: MCP_PASSTHROUGH_HEADERS
+              value: Authorization
+            - name: MCP_DISABLED_TOOLS
+              value: documentation
+            - name: MCP_LOG_FORMAT
+              value: json
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 15010
+              hostPort: 15010
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            failureThreshold: 60
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 30
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: victorialogs-nonprod-mcp
+  namespace: victorialogs-mcp
+  labels:
+    app: victorialogs-nonprod-mcp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: victorialogs-nonprod-mcp
+  template:
+    metadata:
+      labels:
+        app: victorialogs-nonprod-mcp
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: victorialogs-mcp
+          image: ghcr.io/victoriametrics/mcp-victorialogs@sha256:753bb4fbe402ca1a782842f44636830f9895736f11d7fe783b924f8a0daf083d
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: VL_INSTANCE_ENTRYPOINT
+              value: https://gw-c21-1a.cloud.victoriametrics.com
+            - name: MCP_SERVER_MODE
+              value: http
+            - name: MCP_LISTEN_ADDR
+              value: ":15011"
+            - name: MCP_PASSTHROUGH_HEADERS
+              value: Authorization
+            - name: MCP_DISABLED_TOOLS
+              value: documentation
+            - name: MCP_LOG_FORMAT
+              value: json
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: http
+              containerPort: 15011
+              hostPort: 15011
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            failureThreshold: 60
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            periodSeconds: 30

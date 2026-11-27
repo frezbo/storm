@@ -1,0 +1,46 @@
+# storm-dev: Fedora workstation VM (a VM, not a ContainerConfig, so packages
+# upgrade in place and sudo/ptrace work).
+# The system disk is the Fedora Cloud image placed in the pool as
+# dev__system.qcow2 (see libvirtd.yaml); Talos adopts and grows it.
+# The guest reaches storm at 10.250.0.1 over the enp1s0.vm macvlan. The first
+# `tailscale up` prints its login URL to the serial console
+# (talosctl hv console dev); no auth key is kept in machine config.
+apiVersion: v1alpha1
+kind: VirtualMachineConfig
+name: dev
+powerState: running
+cpu:
+  count: 12
+memory:
+  size: 24GiB
+  ballooning:
+    enabled: true
+firmware:
+  type: uefi
+disks:
+  - name: system
+    pool: vms
+    size: 300GiB
+    bootOrder: 1
+    provision:
+      blank: {}
+  # NoCloud seed built from vm/dev/{user-data,meta-data} and uploaded to the
+  # images library: Omni v1.13.3 validates guest.cloudInit.library while
+  # beta.0 only accepts guest.cloudInit.pool, so guest.cloudInit cannot pass.
+  - name: seed
+    pool: vms
+    type: cdrom
+    provision:
+      fromImage:
+        library: images
+        file: dev-seed.iso
+console:
+  serial:
+    enabled: true
+networking:
+  interfaces:
+    - name: net0
+      link: enp1s0
+guest:
+  agent:
+    enabled: true

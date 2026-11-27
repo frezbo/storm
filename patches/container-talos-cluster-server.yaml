@@ -1,0 +1,39 @@
+# talos-cluster-server as a Talos container (was the cluster-server/deploy.yaml
+# Deployment + NodePort Service).
+#
+# Privileged + host network for the QEMU bridge/tap, CNI and iptables. /dev is
+# bind-mounted from the host because the privileged profile only grants device
+# cgroup access; it does not create /dev/kvm, /dev/net/tun or /dev/vhost-net
+# inside the container the way a privileged Kubernetes pod does.
+#
+# There is no NodePort any more: clients connect straight to <node>:50100
+# (the same host-network listener the NodePort 30100 forwarded to).
+# There is no memory limit on purpose: QEMU VMs are child processes in this
+# container's cgroup.
+---
+apiVersion: v1alpha1
+kind: ContainerConfig
+name: talos-cluster-server
+image: storm.goose-piano.ts.net:5000/talos-cluster-server@sha256:3de49dd339ce316459c8168b85d382b921adf7101636b0c4fd8b77048c82eacf
+args:
+  - --listen=0.0.0.0:50100
+  - --state-dir=/var/mnt/talos-clusterserver
+# The image sets USER root by name; Talos needs a numeric uid/gid.
+runAs:
+  uid: 0
+  gid: 0
+security:
+  profile: privileged
+network:
+  mode: host
+mounts:
+  - userVolume:
+      name: talos-clusterserver
+      destination: /var/mnt/talos-clusterserver
+  - hostPath:
+      source: /dev
+      destination: /dev
+dependsOn:
+  # The image is pulled via tailscale serve :5000 -> local push registry.
+  containers:
+    - registry-push
