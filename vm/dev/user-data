@@ -92,5 +92,5 @@ runcmd:
   # write_files creates ~/.gnupg with the default 0755; gpg wants 0700.
   - chmod 700 /home/frezbo/.gnupg
   - until [ -S /run/user/1000/bus ]; do sleep 1; done; sudo -u frezbo XDG_RUNTIME_DIR=/run/user/1000 systemctl --user enable rex.service podman.socket
-  - tailscale up --ssh --operator=frezbo --hostname=storm-dev
+  - tailscale up --ssh --operator=frezbo --hostname=storm-dev --advertise-tags=tag:storm-dev
   - sudo -u frezbo XDG_RUNTIME_DIR=/run/user/1000 systemctl --user restart rex.service
